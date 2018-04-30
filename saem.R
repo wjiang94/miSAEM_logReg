@@ -2,7 +2,7 @@
 # ---------- SAEM
 #X.obs:x1,x2
 #X.all:x1,x2,x3,x4,x5
-miss.saem <- function(X.obs,pos_var,y,maxruns=500,tol_em=1e-7,nmcmc=2,ag=1,k1=50,print_iter=TRUE, var_obs_cal=FALSE, ll_obs_cal=FALSE) {
+miss.saem <- function(X.obs,pos_var=1:ncol(X.obs),y,maxruns=500,tol_em=1e-7,nmcmc=2,ag=1,k1=50,print_iter=TRUE, var_obs_cal=FALSE, ll_obs_cal=FALSE) {
 #delete rows completely missing
   p=ncol(X.obs)#x1,x2
   if(any(apply(is.na(X.obs),1,sum)==p)){

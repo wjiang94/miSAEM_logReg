@@ -70,14 +70,14 @@ for(nb in 1:NB){
   # BIASBETA1_0.5[nb,] = list.saem0.5$seqbeta[2,] 
   # BIASBETAAVG1_0.5[nb,] = list.saem0.5$seqbeta_avg[2,] 
   
-  list.saem0.7=miss.saem(X.obs,y,maxruns=maxruns,tol_em=1e-50,nmcmc=5,ag=ag[2],k1=k1,print_iter=FALSE)
+  list.saem0.7=miss.saem(X.obs=X.obs,y=y,maxruns=maxruns,tol_em=1e-50,nmcmc=5,ag=ag[2],k1=k1,print_iter=FALSE)
   BETA1_0.7[nb,] = list.saem0.7$seqbeta[2,]
   BETAAVG1_0.7[nb,] = list.saem0.7$seqbeta_avg[2,]
   BIASBETA1_0.7[nb,] = list.saem0.7$seqbeta[2,] - list.saem0.7$beta[2]
   BIASBETAAVG1_0.7[nb,] = list.saem0.7$seqbeta_avg[2,] -list.saem0.7$seqbeta_avg[2,maxruns]
   
   
-  list.saem1.0=miss.saem(X.obs,y,maxruns=maxruns,tol_em=1e-50,nmcmc=5,ag=ag[3],k1=k1,print_iter=FALSE)
+  list.saem1.0=miss.saem(X.obs=X.obs,y=y,maxruns=maxruns,tol_em=1e-50,nmcmc=5,ag=ag[3],k1=k1,print_iter=FALSE)
   BETA1_1.0[nb,] = list.saem1.0$seqbeta[2,]
   BETAAVG1_1.0[nb,] = list.saem1.0$seqbeta_avg[2,] 
   BIASBETA1_1.0[nb,] = list.saem1.0$seqbeta[2,] -list.saem1.0$beta[2]
