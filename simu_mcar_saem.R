@@ -19,8 +19,10 @@ C <- matrix(c(   # correlation matrix
   0,   0,   0.3, 1,   0.7,
   0,   0,   0.6, 0.7, 1
 ), nrow=p)
+
 ## without correlation
 # C = diag(p)
+
 Sigma.star <- diag(sd)%*%C%*%diag(sd) # variance-covariance matrix of the explanatory variables
 
 beta.star <- c(0.5, -0.3, 1, 0, -0.6) # coefficients
