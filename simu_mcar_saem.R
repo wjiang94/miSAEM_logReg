@@ -4,21 +4,23 @@ library(mice)
 source("saem.R")
 
 N <- 1000 # number of subjects
-#N <- 1000 # number of subjects
+#N <- 10000 # number of subjects
 
 p <- 5     # number of explanatory variables
 
 mu.star <- 1:p  #rep(0,p)  # mean of the explanatory variables
 sd <- 1:p # rep(1,p) # standard deviations
 
-# C <- matrix(c(   # correlation matrix
-#   1,   0.8, 0,   0,   0,
-#   0.8, 1,   0,   0,   0,
-#   0,   0,   1,   0.3, 0.6,
-#   0,   0,   0.3, 1,   0.7,
-#   0,   0,   0.6, 0.7, 1
-# ), nrow=p)
-C = diag(p)
+# with correlation
+C <- matrix(c(   # correlation matrix
+  1,   0.8, 0,   0,   0,
+  0.8, 1,   0,   0,   0,
+  0,   0,   1,   0.3, 0.6,
+  0,   0,   0.3, 1,   0.7,
+  0,   0,   0.6, 0.7, 1
+), nrow=p)
+## without correlation
+# C = diag(p)
 Sigma.star <- diag(sd)%*%C%*%diag(sd) # variance-covariance matrix of the explanatory variables
 
 beta.star <- c(0.5, -0.3, 1, 0, -0.6) # coefficients
@@ -35,8 +37,7 @@ count.saem = count.comp =  count.mice = rep(0,p+1)
 
 #100 simus
 beta.true = c(beta0.star,beta.star)
-p.miss <- 0.20 
-set.seed(10)
+p.miss <- 0.10 
 patterns = runif(N*p)<p.miss
 
 for (NB in 1:nbsim){
@@ -60,9 +61,20 @@ for (NB in 1:nbsim){
   std.complete <- sqrt(diag(V_complete))
   
   # ------- generating missing data
+  #MCAR
   X.obs <- X.complete
   X.obs[patterns] <- NA
   
+  ## MAR
+  # X.obs <- X.complete
+  # for(i in c(2,4,5)){
+  #   z <- cbind(y,X.complete[,c(1,3)])%*%matrix(sample(-5:5, 3, replace=T),ncol=1)        # linear combination 
+  #   pr <- 1/(1+exp(-z))         # pass through an inv-logit function
+  #   r <- rbinom(N,1,pr)      # bernoulli response variable
+  #   X.obs[r==0,i]<-NA
+  # }
+  # cat('percentage of NA: ', mean(is.na(X.obs[,2])),mean(is.na(X.obs[,4])),mean(is.na(X.obs[,5])),'\n')
+  # 
   
   # ------- estimation ignoring the missing data
   data.obs <- data.frame(y=y,X.obs)
