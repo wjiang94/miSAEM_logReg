@@ -4,7 +4,7 @@ Here are R codes of functions and implementations for paper
 "Stochastic Approximation EM for Logistic regression with missing values (2018, Jiang W., Josse J., Lavielle M.)".
 
 ## Installation of package 
-First you can install the package *misaem* from Github. The main function 'miss.saem' contains the procedure of estimation for parameters, as well as their variance, and observed likelihood.
+First you can install the package *misaem* from Github. The main function ''miss.saem'' contains the procedure of estimation for parameters, as well as their variance, and observed likelihood.
 ```{r}
 library(devtools)
 install_github("wjiang94/misaem")
