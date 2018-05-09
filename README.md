@@ -1,8 +1,17 @@
 
-# SAEM for Logistic regression with missing data
-Codes and implementations for "Stochastic Approximated EM for Logistic regression with missing data".
+# SAEM for logistic regression with missing values
+Here are R codes of functions and implementations for paper
+"Stochastic Approximation EM for Logistic regression with missing values (2018, Jiang W., Josse J., Lavielle M.)".
 
-**saem.R**: Functions for parameters' estimation with SAEM, estimation of their vairiance and observed log-likelihood.
+## Installation of package 
+First you can install the package *misaem* from Github. The main function 'miss.saem' contains the procedure of estimation for parameters, as well as their variance, and observed likelihood.
+```{r}
+library(devtools)
+install_github("wjiang94/misaem")
+ ```
+## Implementation of simulation study
+
+When you execute the following R codes, you can reproduce the results of the paper.
 
 **convergene_saem.R**: Implementation of convergence of SAEM (Figure 1)
 
