@@ -11,7 +11,7 @@ install_github("wjiang94/misaem")
  ```
 ## Implementation of simulation study
 
-When you execute the following R codes, you can reproduce the results of the paper.
+When you execute R codes in the following files, you can reproduce the results of the paper.
 
 **convergence_saem.R**: Implementation of convergence of SAEM (Figure 1)
 
