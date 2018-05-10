@@ -2,19 +2,48 @@
 title: "Convergence of SAEM"
 author: "Wei Jiang"
 date: "5/10/2018"
-output: html_document:
+output: 
+  html_document:
+    keep_md: true
 ---
 
 Here are R codes to demonstate the convergence of SAEM.
 
 First load all the libraries that we will use.
-```{r}
+
+```r
 library(misaem) #https://github.com/wjiang94/misaem
 library(MASS)
 library(mvtnorm)
 library(ggplot2)
 library(reshape2)
 library(dplyr)
+```
+
+```
+## 
+## Attaching package: 'dplyr'
+```
+
+```
+## The following object is masked from 'package:MASS':
+## 
+##     select
+```
+
+```
+## The following objects are masked from 'package:stats':
+## 
+##     filter, lag
+```
+
+```
+## The following objects are masked from 'package:base':
+## 
+##     intersect, setdiff, setequal, union
+```
+
+```r
 library(RColorBrewer)
 theme_set(theme_bw())
 ```
@@ -22,7 +51,8 @@ theme_set(theme_bw())
 ## Simulation setting
 
 We first generate a design matrix of size $n=1000$ times $p=5$ by drawing each observation from a multivariate normal distribution $\mathcal{N}(\mu, \Sigma)$. Then, we generate the response according to the logistic regression model with coefficients $\beta$.
-```{r}
+
+```r
 n <- 1000  # number of subjects
 p <- 5     # number of explanatory variables
 mu.star <- 1:p  # mean of the explanatory variables
@@ -47,25 +77,65 @@ p1 <- 1/(1+exp(-X.complete%*%beta.star-beta0.star))
 y <- as.numeric(runif(n)<p1)
 ```
 Then we randomly introduce 10\% of missing values in the covariates according to the MCAR mechanism.
-```{r}
+
+```r
 p.miss <- 0.10 
 patterns = runif(n*p)<p.miss
 X.obs <- X.complete
 X.obs[patterns] <- NA
 ```
 After that, with existence of missingness, SAEM can be used for estimating the parameters of the model. By default, the algorithm was initialized with the parameters obtained after mean imputation, i.e. imputing the missing entries with the mean of the variables on observed values and estimating the parameters on the completed data set. For more details and help, type `help(miss.saem)`.
-```{r}
+
+```r
 list.saem=miss.saem(X.obs,y,print_iter = FALSE,var_cal = TRUE, ll_obs_cal = TRUE)
 cat("Estimated beta: ", '\n', list.saem$beta, '\n')
+```
+
+```
+## Estimated beta:  
+##  -0.2178633 0.5820972 -0.2966115 0.9978482 -0.06727344 -0.5785215
+```
+
+```r
 cat("Variance-covariance matrix for estimation: ", '\n', list.saem$var_obs, '\n')
+```
+
+```
+## Variance-covariance matrix for estimation:  
+##  0.0327931 -0.007603755 -0.001368301 -0.002735261 -0.001377769 7.26819e-05 -0.007603755 0.03207555 -0.01315206 0.00247666 0.0001540255 -0.001410749 -0.001368301 -0.01315206 0.007733421 -0.001134921 -8.815099e-05 0.0006447723 -0.002735261 0.00247666 -0.001134921 0.004937947 -3.47702e-05 -0.002742649 -0.001377769 0.0001540255 -8.815099e-05 -3.47702e-05 0.00116789 -0.0006047576 7.26819e-05 -0.001410749 0.0006447723 -0.002742649 -0.0006047576 0.00231534
+```
+
+```r
 cat("Standard error for estimation: ", '\n', list.saem$std_obs, '\n')
+```
+
+```
+## Standard error for estimation:  
+##  0.1810887 0.1790965 0.08793987 0.07027052 0.0341744 0.04811798
+```
+
+```r
 cat("Observed log-likelihood: ", '\n', list.saem$ll, '\n')
+```
+
+```
+## Observed log-likelihood:  
+##  -10181.03
+```
+
+```r
 cat("Execution time: ", '\n', list.saem$time_run, '\n')
+```
+
+```
+## Execution time:  
+##  19.99691
 ```
 
 ## Convergence of SAEM
 In order to study the convergence of SAEM with respect to the step size $\gamma_k$, we choose $\gamma_k = 1$ during the first $k_1$ iterations in order to converge quickly to the neighborhood of MLE, and after $k_1$ iterations, we set $\gamma_k = (k - k_1)^{-\tau}$ to ensure the almost sure convergence of SAEM. We fix the value of $k_1=50$ and use $\tau=0.6 , \ 0.8, \ 1$ during the next 450 iterations. We run 5 times of simulations.
-```{r}
+
+```r
 NB = 4 # number of repetitions of simulations
 tau <- c(0.6, 0.8, 1)
 k1 <- 50
@@ -107,8 +177,8 @@ for(nb in 1:NB){
 
 Here we produce the convergence plot.
 Convergence plots for $\beta_1$ obtained with three different values of $\tau$, Each color represents one simulation.
-```{r}
-# pdf('saem_gammak.pdf',width = 11, height = 8 ,onefile = T) # save as pdf
+
+```r
 fnames <- c("0.6", "0.8", "1.0")
 df1 <- as.data.frame(t(BETA1_0.6))
 names(df1) <- 1:NB
@@ -143,9 +213,15 @@ pl <- ggplot(df) + geom_line(aes(iteration,value,color=replicate)) +
 print(pl)
 ```
 
+```
+## Warning: Removed 4 rows containing missing values (geom_path).
+```
+
+![](convergence_saem_files/figure-html/unnamed-chunk-6-1.png)<!-- -->
+
 Convergence plot for all $\beta$ in SAEM. Each color represents one parameter:
-```{r}
-# pdf('converge_tau_all_beta.pdf',width = 11, height = 8 ,onefile = T) # save as pdf
+
+```r
 df1 <- as.data.frame(t(list.saem0.6$seqbeta))
 names(df1) <- paste0("beta[",0:5,"]")
 df1['iteration'] <- 0:(nrow(df1)-1)
@@ -183,4 +259,10 @@ pl <- ggplot(df) + geom_line(aes(iteration,value,color=parameter)) +
   theme(strip.text = element_text(size=12), axis.title=element_text(size=14))
 print(pl)
 ```
+
+```
+## Warning: Removed 6 rows containing missing values (geom_path).
+```
+
+![](convergence_saem_files/figure-html/unnamed-chunk-7-1.png)<!-- -->
 
