@@ -1,0 +1,184 @@
+---
+title: "Convergence of SAEM"
+author: "Wei Jiang"
+date: "5/10/2018"
+output: html_document
+---
+
+Here are R codes to demonstate the convergence of SAEM.
+
+First load all the libraries that we will use.
+```{r}
+library(misaem) #https://github.com/wjiang94/misaem
+library(MASS)
+library(mvtnorm)
+library(ggplot2)
+library(reshape2)
+library(dplyr)
+library(RColorBrewer)
+theme_set(theme_bw())
+```
+
+## Simulation setting
+
+We first generate a design matrix of size $n=1000$ times $p=5$ by drawing each observation from a multivariate normal distribution $\mathcal{N}(\mu, \Sigma)$. Then, we generate the response according to the logistic regression model with coefficients $\beta$.
+```{r}
+n <- 1000  # number of subjects
+p <- 5     # number of explanatory variables
+mu.star <- 1:p  # mean of the explanatory variables
+sd <- 1:p # standard deviations
+C <- matrix(c(   # correlation matrix
+  1,   0.8, 0,   0,   0,
+  0.8, 1,   0,   0,   0,
+  0,   0,   1,   0.3, 0.6,
+  0,   0,   0.3, 1,   0.7,
+  0,   0,   0.6, 0.7, 1
+), nrow=p)
+Sigma.star <- diag(sd)%*%C%*%diag(sd) # variance-covariance matrix of the explanatory variables
+
+beta.star <- c(0.5, -0.3, 1, 0, -0.6) # coefficients of logistic regression
+beta0.star <- -0.2  # intercept
+beta.true = c(beta0.star,beta.star)
+
+# generate complete design matrix
+X.complete <- matrix(rnorm(n*p), nrow=n)%*%chol(Sigma.star) + matrix(rep(mu.star,n), nrow=n, byrow = TRUE)
+# generate response vector
+p1 <- 1/(1+exp(-X.complete%*%beta.star-beta0.star))
+y <- as.numeric(runif(n)<p1)
+```
+Then we randomly introduce 10\% of missing values in the covariates according to the MCAR mechanism.
+```{r}
+p.miss <- 0.10 
+patterns = runif(n*p)<p.miss
+X.obs <- X.complete
+X.obs[patterns] <- NA
+```
+After that, with existence of missingness, SAEM can be used for estimating the parameters of the model. By default, the algorithm was initialized with the parameters obtained after mean imputation, i.e. imputing the missing entries with the mean of the variables on observed values and estimating the parameters on the completed data set. For more details and help, type `help(miss.saem)`.
+```{r}
+list.saem=miss.saem(X.obs,y,print_iter = FALSE,var_cal = TRUE, ll_obs_cal = TRUE)
+cat("Estimated beta: ", '\n', list.saem$beta, '\n')
+cat("Variance-covariance matrix for estimation: ", '\n', list.saem$var_obs, '\n')
+cat("Standard error for estimation: ", '\n', list.saem$std_obs, '\n')
+cat("Observed log-likelihood: ", '\n', list.saem$ll, '\n')
+cat("Execution time: ", '\n', list.saem$time_run, '\n')
+```
+
+## Convergence of SAEM
+In order to study the convergence of SAEM with respect to the step size $\gamma_k$, we choose $\gamma_k = 1$ during the first $k_1$ iterations in order to converge quickly to the neighborhood of MLE, and after $k_1$ iterations, we set $\gamma_k = (k - k_1)^{-\tau}$ to ensure the almost sure convergence of SAEM. We fix the value of $k_1=50$ and use $\tau=0.6 , \ 0.8, \ 1$ during the next 450 iterations. We run 5 times of simulations.
+```{r}
+NB = 4 # number of repetitions of simulations
+tau <- c(0.6, 0.8, 1)
+k1 <- 50
+maxruns=500
+BIASBETA1_0.6 = BETA1_0.6 = matrix(0, NB, maxruns+1)
+BIASBETA1_0.8 = BETA1_0.8 = matrix(0, NB, maxruns+1)
+BIASBETA1_1.0 = BETA1_1.0 = matrix(0, NB, maxruns+1)
+
+seed <- c(1,10,100,1000)
+
+for(nb in 1:NB){
+  set.seed(seed[nb])
+  # ----- complete data 
+  X.complete <- matrix(rnorm(n*p), nrow=n)%*%chol(Sigma.star) + matrix(rep(mu.star,n), nrow=n, byrow = TRUE)
+  p1 <- 1/(1+exp(-X.complete%*%beta.star-beta0.star))
+  y <- as.numeric(runif(n)<p1)
+  
+  # ------- generating missing data
+  X.obs <- X.complete
+  patterns = runif(n*p)<p.miss
+  X.obs[patterns] <- NA
+  
+  # tau = 0.6
+  list.saem0.6=miss.saem(X.obs,y,maxruns=maxruns,tol_em=1e-50,tau=tau[1],k1=k1,print_iter=FALSE)
+  BETA1_0.6[nb,] = list.saem0.6$seqbeta[2,] 
+  BIASBETA1_0.6[nb,] = list.saem0.6$seqbeta[2,] - list.saem0.6$beta[2]
+  
+  # tau = 0.8
+  list.saem0.8=miss.saem(X.obs,y,maxruns=maxruns,tol_em=1e-50,tau=tau[2],k1=k1,print_iter=FALSE)
+  BETA1_0.8[nb,] = list.saem0.8$seqbeta[2,]
+  BIASBETA1_0.8[nb,] = list.saem0.8$seqbeta[2,] - list.saem0.8$beta[2]
+  
+  # tau = 1.0
+  list.saem1.0=miss.saem(X.obs,y,maxruns=maxruns,tol_em=1e-50,tau=tau[3],k1=k1,print_iter=FALSE)
+  BETA1_1.0[nb,] = list.saem1.0$seqbeta[2,]
+  BIASBETA1_1.0[nb,] = list.saem1.0$seqbeta[2,] - list.saem1.0$beta[2]
+}
+```
+
+Here we produce the convergence plot.
+Convergence plots for $\beta_1$ obtained with three different values of $\tau$, Each color represents one simulation.
+```{r}
+fnames <- c("0.6", "0.8", "1.0")
+df1 <- as.data.frame(t(BETA1_0.6))
+names(df1) <- 1:NB
+df1['iteration'] <- 0:(nrow(df1)-1)
+df1 <- melt(df1, variable.name="replicate", id.vars = list("iteration")) 
+df1['tau'] = fnames[1] 
+df2 <- as.data.frame(t(BETA1_0.8))
+names(df2) <- 1:NB
+df2['iteration'] <- 0:(nrow(df2)-1)
+df2 <- melt(df2, variable.name="replicate", id.vars = list("iteration")) 
+df2['tau'] = fnames[2] 
+df3 <- as.data.frame(t(BETA1_1.0))
+names(df3) <- 1:NB
+df3['iteration'] <- 0:(nrow(df3)-1)
+df3 <- melt(df3, variable.name="replicate", id.vars = list("iteration")) 
+df3['tau'] = fnames[3] 
+
+df <- rbind(df1, df2, df3)
+df[['tau']] <- factor(df[['tau']], levels=fnames)
+levels(df[['tau']]) <- c("tau*' = 0.6'", "tau*' = 0.8'", "tau*'= 1.0'")
+
+beta2 <- subset(df, iteration==maxruns)
+beta1 <- beta2
+beta1$iteration <- 0
+beta <- rbind(beta1, beta2)
+
+pl <- ggplot(df) + geom_line(aes(iteration,value,color=replicate)) + 
+  geom_line(data=beta, aes(iteration, value, color=replicate), linetype=3) +
+  facet_grid(~tau, labeller = label_parsed) +  ylab(expression(bias~of~beta[1])) +
+  theme(strip.text = element_text(size=12), axis.title=element_text(size=14), 
+        legend.position="none")
+print(pl)
+```
+
+Convergence plot for all $\beta$ in SAEM. Each color represents one parameter:
+```{r}
+df1 <- as.data.frame(t(list.saem0.6$seqbeta))
+names(df1) <- paste0("beta[",0:5,"]")
+df1['iteration'] <- 0:(nrow(df1)-1)
+df1 <- melt(df1, variable.name="parameter", id.vars = list("iteration")) 
+df1['tau'] = fnames[1] 
+df2 <- as.data.frame(t(list.saem0.8$seqbeta))
+names(df2) <- paste0("beta[",0:5,"]")
+df2['iteration'] <- 0:(nrow(df2)-1)
+df2 <- melt(df2, variable.name="parameter", id.vars = list("iteration")) 
+df2['tau'] = fnames[2] 
+df3 <- as.data.frame(t(list.saem1.0$seqbeta))
+names(df3) <- paste0("beta[",0:5,"]")
+df3['iteration'] <- 0:(nrow(df3)-1)
+df3 <- melt(df3, variable.name="parameter", id.vars = list("iteration")) 
+df3['tau'] = fnames[3] 
+
+df <- rbind(df1, df2, df3)
+df[['tau']] <- factor(df[['tau']], levels=fnames)
+levels(df[['tau']]) <- c("tau*' = 0.6'", "tau*' = 0.8'", "tau*'= 1.0'")
+
+beta2 <- subset(df, iteration==maxruns)
+beta1 <- beta2
+beta1$iteration <- 0
+beta <- rbind(beta1, beta2)
+
+ldf <- levels(df$parameter)
+labl <- list(expression(beta[0]), expression(beta[1]), expression(beta[2]),
+             expression(beta[3]), expression(beta[4]), expression(beta[5]) ) 
+
+palette(brewer.pal(6, "Dark2"))
+pl <- ggplot(df) + geom_line(aes(iteration,value,color=parameter)) + 
+#  geom_line(data=beta, aes(iteration, value, color=replicate)) +
+  facet_grid(~tau, labeller = label_parsed) +  ylab(expression(beta)) +
+  scale_color_manual(labels = labl, values=1:6) +
+  theme(strip.text = element_text(size=12), axis.title=element_text(size=14))
+print(pl)
+```
+
