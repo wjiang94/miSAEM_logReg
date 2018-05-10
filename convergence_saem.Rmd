@@ -2,7 +2,7 @@
 title: "Convergence of SAEM"
 author: "Wei Jiang"
 date: "5/10/2018"
-output: html_document:
+output: html_notebook
 ---
 
 Here are R codes to demonstate the convergence of SAEM.
