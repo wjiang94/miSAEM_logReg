@@ -17,7 +17,7 @@ When you execute *Rmarkdown* codes in the following files, you can reproduce the
 * Brief introduction of simulation procedure
 * Demonstration of convergence of SAEM (Figure 1 and Figure 8)
 
-**simu_mcar_saem.R**: 
+**simu_mcar_saem**: 
 Simulation study to assess the performance of SAEM by comparing several other existing methods for missing data :
 * The complete case (CC) method : all rows containing at least one unobserved data value were removed)
 * Multiple imputation based on conditional modelling as implemented in the R package `mice` (with its default settings and Rubin's combining rules)
