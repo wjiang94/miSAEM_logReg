@@ -17,10 +17,17 @@ When you execute *Rmarkdown* codes in the following files, you can reproduce the
 * Brief introduction of simulation procedure
 * Demonstration of convergence of SAEM (Figure 1 and Figure 8)
 
-**simu_mcar_saem.R**: Simulation study on comparison of complete case analysis method (CC), multiple imputation (mice), SAEM and the classical estimation procedure on the original dataset without missing data (no NA). The missing mechanism is Missing completely at random (MCAR).
-1. Bias for estimation with 100 times of simulations (Figure 2).
-2. Estimated standard error with 100 times of simulations (Figure 3).
-3. Coverage of confidence interval with 1000 times of simulations (Table 1).
-4. Execution time (Table 2).
+**simu_mcar_saem.R**: 
+Simulation study to assess the performance of SAEM by comparing several other existing methods for missing data :
+* The complete case (CC) method : all rows containing at least one unobserved data value were removed)
+* Multiple imputation based on conditional modelling as implemented in the R package `mice` (with its default settings and Rubin's combining rules)
+* MCEM algorithm that we implemented using adaptive rejection sampling (MCEM-AR). 
+* We use the dataset without missing values (no NA) as a reference, with parameters estimated with the Newton-Raphson algorithm as implemented in the `glm` function in R.
+
+We run repetitions of simulations. And evaluate their performance, intially in terms of estimation errors of the parameters, as well as the standard error of estimation and the coverage of confidence interval. Here we can reproduce
+* Bias for estimation with 100 times of simulations (Figure 2).
+* Estimated standard error with 100 times of simulations (Figure 3).
+* Coverage of confidence interval with 1000 times of simulations (Table 1).
+* Execution time (Table 2).
 
 **model_selection.R**:  Model selection results (Table 3).
