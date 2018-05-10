@@ -11,10 +11,10 @@ install_github("wjiang94/misaem")
  ```
 ## Implementation of simulation study
 
-When you execute Rmarkdown codes in the following files, you can reproduce the results of the paper. You can also refer to the corresponding html file to see the implementations and comments. 
+When you execute *Rmarkdown* codes in the following files, you can reproduce the results of the paper. You can also refer to the corresponding *html* file to see the implementations and comments. 
 
-**convergence_saem.Rmd**: 
-* Brief introduction of simulation process
+**convergence_saem**: 
+* Brief introduction of simulation procedure
 * Demonstration of convergence of SAEM (Figure 1 and Figure 8)
 
 **simu_mcar_saem.R**: Simulation study on comparison of complete case analysis method (CC), multiple imputation (mice), SAEM and the classical estimation procedure on the original dataset without missing data (no NA). The missing mechanism is Missing completely at random (MCAR).
