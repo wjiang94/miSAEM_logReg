@@ -26,8 +26,8 @@ Simulation study to assess the performance of SAEM by comparing several other ex
 
 We run repetitions of simulations. And evaluate their performance, intially in terms of estimation errors of the parameters, as well as the standard error of estimation and the coverage of confidence interval. Here we can reproduce
 * Bias for estimation with 100 times of simulations (Figure 2).
-* Estimated standard error with 100 times of simulations (Figure 3).
+* Estimated standard error with 100 times of simulations (Figure 2).
 * Coverage of confidence interval with 1000 times of simulations (Table 1).
 * Execution time (Table 2).
 
-**model_selection.R**:  Model selection results (Table 3).
+**model_selection**:  Model selection results (Table 3).
