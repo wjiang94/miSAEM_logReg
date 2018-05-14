@@ -176,21 +176,133 @@ $(document).ready(function () {
 
 
 <!-- rnb-text-begin -->
-<p>This is an <a href="http://rmarkdown.rstudio.com">R Markdown</a> Notebook. When you execute code within the notebook, the results appear beneath the code.</p>
-<p>Try executing this chunk by clicking the <em>Run</em> button within the chunk or by placing your cursor inside it and pressing <em>Cmd+Shift+Enter</em>.</p>
+<p>After we estimate the parameters and their variance with SAEM, the next objective is to perform variable selection with missing values.</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxucGxvdChjYXJzKVxuYGBgIn0= -->
-<pre class="r"><code>plot(cars)</code></pre>
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubGlicmFyeShtaXNhZW0pXG5saWJyYXJ5KE1BU1MpXG5saWJyYXJ5KG12dG5vcm0pXG5gYGAifQ== -->
+<pre class="r"><code>library(misaem)
+library(MASS)
+library(mvtnorm)</code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
-<p>Add a new chunk by clicking the <em>Insert Chunk</em> button on the toolbar or by pressing <em>Cmd+Option+I</em>.</p>
-<p>When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the <em>Preview</em> button or press <em>Cmd+Shift+K</em> to preview the HTML file).</p>
-<p>The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike <em>Knit</em>, <em>Preview</em> does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.</p>
+<p>Here we first assign the true values of parameters.</p>
+<p>(By using different values, we can construct different setting, such as number of subjects <span class="math inline">\(n\)</span> or structure of correlation.)</p>
+<!-- rnb-text-end -->
+<!-- rnb-chunk-begin -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubiA8LSAxMDAwICAjIG51bWJlciBvZiBzdWJqZWN0c1xuIyBuIDwtIDEwMDAwICMgb3IgYSBsYXJnZXIgbnVtYmVyIG9mIHN1YmplY3RzIFxuXG5wIDwtIDUgICAgICMgbnVtYmVyIG9mIGV4cGxhbmF0b3J5IHZhcmlhYmxlc1xubXUuc3RhciA8LSAxOnAgICMgbWVhbiBvZiB0aGUgZXhwbGFuYXRvcnkgdmFyaWFibGVzXG5zZCA8LSAxOnAgIyBzdGFuZGFyZCBkZXZpYXRpb25zXG5cbiMgd2l0aCBjb3JyZWxhdGlvblxuQyA8LSBtYXRyaXgoYyggICAjIGNvcnJlbGF0aW9uIG1hdHJpeFxuICAxLCAgIDAuOCwgMCwgICAwLCAgIDAsXG4gIDAuOCwgMSwgICAwLCAgIDAsICAgMCxcbiAgMCwgICAwLCAgIDEsICAgMC4zLCAwLjYsXG4gIDAsICAgMCwgICAwLjMsIDEsICAgMC43LFxuICAwLCAgIDAsICAgMC42LCAwLjcsIDFcbiksIG5yb3c9cClcbiMjIG9yIHdpdGhvdXQgY29ycmVsYXRpb25cbiMgQyA9IGRpYWcocClcblxuU2lnbWEuc3RhciA8LSBkaWFnKHNkKSUqJUMlKiVkaWFnKHNkKSAjIHZhcmlhbmNlLWNvdmFyaWFuY2UgbWF0cml4IG9mIHRoZSBleHBsYW5hdG9yeSB2YXJpYWJsZXNcblxuYmV0YS5zdGFyIDwtIGMoMC41LCAwLCAxLCAwLCAtMC42KSAgIyBjb2VmZmljaWVudHMgb2YgbG9naXN0aWMgcmVncmVzc2lvblxuYmV0YTAuc3RhciA8LSAtMC4yICAjIGludGVyY2VwdFxuYmV0YS50cnVlID0gYyhiZXRhMC5zdGFyLGJldGEuc3RhcilcblxuI3BlcmNlbnRhZ2Ugb2YgbWlzc2luZ25lc3NcbnAubWlzcyA8LSAwLjEwIFxuYGBgIn0= -->
+<pre class="r"><code>n &lt;- 1000  # number of subjects
+# n &lt;- 10000 # or a larger number of subjects 
+
+p &lt;- 5     # number of explanatory variables
+mu.star &lt;- 1:p  # mean of the explanatory variables
+sd &lt;- 1:p # standard deviations
+
+# with correlation
+C &lt;- matrix(c(   # correlation matrix
+  1,   0.8, 0,   0,   0,
+  0.8, 1,   0,   0,   0,
+  0,   0,   1,   0.3, 0.6,
+  0,   0,   0.3, 1,   0.7,
+  0,   0,   0.6, 0.7, 1
+), nrow=p)
+## or without correlation
+# C = diag(p)
+
+Sigma.star &lt;- diag(sd)%*%C%*%diag(sd) # variance-covariance matrix of the explanatory variables
+
+beta.star &lt;- c(0.5, 0, 1, 0, -0.6)  # coefficients of logistic regression
+beta0.star &lt;- -0.2  # intercept
+beta.true = c(beta0.star,beta.star)
+
+#percentage of missingness
+p.miss &lt;- 0.10 </code></pre>
+<!-- rnb-source-end -->
+<!-- rnb-chunk-end -->
+<!-- rnb-text-begin -->
+<p>We consider the criterion based on penalised likelihood, such as AIC and BIC, for selecting variables. For each combination of variables, we estimate the parameters with SAEM, then calculate the observed log-likelihood. Finally we select the best model according to the minimum value of AIC or BIC.</p>
+<p>We run 100 repetitions of simulations, and count the percentage when, the percentage of cases where each criterion selects the true model (C), overfits (O) – i.e., selects more variables than there were – or underfits (U) – i.e., selects less variables than there were.</p>
+<!-- rnb-text-end -->
+<!-- rnb-chunk-begin -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubmIuc2ltdSA9IDEwMFxuXG5zdWJzZXRzPWNvbWJpbmF0aW9ucyhwKVxuXG5sbCA9IEFJQyA9IEJJQyA9IG1hdHJpeCgwLCBucm93ID0gbmIuc2ltdSwgbmNvbCA9IG5yb3coc3Vic2V0cyktMSlcblxuQUlDX21pbiA9QklDX21pbiA9IG1hdHJpeCgxZSs1LG5yb3cgPSBuYi5zaW11LG5jb2wgPSBwKVxual9BSUMgPSBqX0JJQyAgPSBtYXRyaXgoMCxucm93ID0gbmIuc2ltdSxuY29sID0gcClcblxuQUlDX2FsbF9taW4gPUJJQ19hbGxfbWluID0gcmVwKDFlKzUsbmIuc2ltdSlcbmpfYWxsX0FJQyA9IGpfYWxsX0JJQyA9IHJlcCgwLG5iLnNpbXUpXG5cbmZvcihuYiBpbiAxOm5iLnNpbXUpe1xuICBzZXQuc2VlZChuYilcbiAgY2F0KCdzaW11ICcsbmIsJ1xcbicpXG4gICMgY29tcGxldGUgZGF0YSBzaW11bGF0aW9uXG4gIHBhdHRlcm5zID0gcnVuaWYobipwKTxwLm1pc3NcbiAgWC5jb21wbGV0ZSA8LSBtYXRyaXgocm5vcm0obipwKSwgbnJvdz1uKSUqJWNob2woU2lnbWEuc3RhcikgKyBtYXRyaXgocmVwKG11LnN0YXIsbiksIG5yb3c9biwgYnlyb3cgPSBUUlVFKVxuICBwMSA8LSAxLygxK2V4cCgtWC5jb21wbGV0ZSUqJWJldGEuc3Rhci1iZXRhMC5zdGFyKSlcbiAgeSA8LSBhcy5udW1lcmljKHJ1bmlmKG4pPHAxKVxuICBcbiAgIyBnZW5lcmF0ZSBtaXNzaW5nbmVzc1xuICBYLm9icyA8LSBYLmNvbXBsZXRlXG4gIFgub2JzW3BhdHRlcm5zXSA8LSBOQVxuICBcbiAgIyBpdGVyYXRlIGFtb25nIGVhY2ggY29tYmluYXRpb25cbiAgZm9yIChqIGluIDE6KG5yb3coc3Vic2V0cyktMSkpe1xuICAgIG5iLnZhciA9IHN1bShzdWJzZXRzW2osXSlcbiAgICB2YXJpYWJsZXMgPSBzdWJzZXRzW2osXVxuICAgIHBvc192YXI9d2hpY2godmFyaWFibGVzPT0xKVxuICAgIG5iLnggPSBzdW0odmFyaWFibGVzKVxuICAgIG5iLnBhcmEgPSAobmIueCArIDEpICsgcCArIHAqcCBcbiAgICBsaXN0LnNhZW0uc3Vic2V0PW1pc3Muc2FlbShYLm9icyx5LHBvc192YXIsbWF4cnVucz0xMDAwLHRvbF9lbT0xZS03LG5tY21jPTIsdGF1PTEsazE9NSxwcmludF9pdGVyPUZBTFNFLGxsX29ic19jYWw9VFJVRSlcbiAgICBsbFtuYixqXSA9IGxpc3Quc2FlbS5zdWJzZXQkbGxcbiAgICBBSUNbbmIsal0gPSAtMipsbFtuYixqXSsgMipuYi5wYXJhXG4gICAgQklDW25iLGpdID0gLTIqbGxbbmIsal0rIG5iLnBhcmEgKiBsb2cobilcbiAgICBcbiAgICBpZihBSUNbbmIsal08PUFJQ19taW5bbmIsbmIueF0pe1xuICAgICAgQUlDX21pbltuYixuYi54XT0gQUlDW25iLGpdXG4gICAgICBqX0FJQ1tuYixuYi54XSA9IGpcbiAgICB9XG4gICAgaWYoQklDW25iLGpdPD1CSUNfbWluW25iLG5iLnhdKXtcbiAgICAgIEJJQ19taW5bbmIsbmIueF09IEJJQ1tuYixqXVxuICAgICAgal9CSUNbbmIsbmIueF0gPSBqXG4gICAgfVxuICAgIGlmKEFJQ1tuYixqXTw9QUlDX2FsbF9taW5bbmJdKXtcbiAgICAgIEFJQ19hbGxfbWluW25iXT0gQUlDW25iLGpdXG4gICAgICBqX2FsbF9BSUNbbmJdID0galxuICAgIH1cbiAgICBpZihCSUNbbmIsal08PUJJQ19hbGxfbWluW25iXSl7XG4gICAgICBCSUNfYWxsX21pbltuYl09IEJJQ1tuYixqXVxuICAgICAgal9hbGxfQklDW25iXSA9IGpcbiAgICB9XG4gIH1cbn1cblxuYGBgIn0= -->
+<pre class="r"><code>nb.simu = 100
+
+subsets=combinations(p)
+
+ll = AIC = BIC = matrix(0, nrow = nb.simu, ncol = nrow(subsets)-1)
+
+AIC_min =BIC_min = matrix(1e+5,nrow = nb.simu,ncol = p)
+j_AIC = j_BIC  = matrix(0,nrow = nb.simu,ncol = p)
+
+AIC_all_min =BIC_all_min = rep(1e+5,nb.simu)
+j_all_AIC = j_all_BIC = rep(0,nb.simu)
+
+for(nb in 1:nb.simu){
+  set.seed(nb)
+  cat('simu ',nb,'\n')
+  # complete data simulation
+  patterns = runif(n*p)&lt;p.miss
+  X.complete &lt;- matrix(rnorm(n*p), nrow=n)%*%chol(Sigma.star) + matrix(rep(mu.star,n), nrow=n, byrow = TRUE)
+  p1 &lt;- 1/(1+exp(-X.complete%*%beta.star-beta0.star))
+  y &lt;- as.numeric(runif(n)&lt;p1)
+  
+  # generate missingness
+  X.obs &lt;- X.complete
+  X.obs[patterns] &lt;- NA
+  
+  # iterate among each combination
+  for (j in 1:(nrow(subsets)-1)){
+    nb.var = sum(subsets[j,])
+    variables = subsets[j,]
+    pos_var=which(variables==1)
+    nb.x = sum(variables)
+    nb.para = (nb.x + 1) + p + p*p 
+    list.saem.subset=miss.saem(X.obs,y,pos_var,maxruns=1000,tol_em=1e-7,nmcmc=2,tau=1,k1=5,print_iter=FALSE,ll_obs_cal=TRUE)
+    ll[nb,j] = list.saem.subset$ll
+    AIC[nb,j] = -2*ll[nb,j]+ 2*nb.para
+    BIC[nb,j] = -2*ll[nb,j]+ nb.para * log(n)
+    
+    if(AIC[nb,j]&lt;=AIC_min[nb,nb.x]){
+      AIC_min[nb,nb.x]= AIC[nb,j]
+      j_AIC[nb,nb.x] = j
+    }
+    if(BIC[nb,j]&lt;=BIC_min[nb,nb.x]){
+      BIC_min[nb,nb.x]= BIC[nb,j]
+      j_BIC[nb,nb.x] = j
+    }
+    if(AIC[nb,j]&lt;=AIC_all_min[nb]){
+      AIC_all_min[nb]= AIC[nb,j]
+      j_all_AIC[nb] = j
+    }
+    if(BIC[nb,j]&lt;=BIC_all_min[nb]){
+      BIC_all_min[nb]= BIC[nb,j]
+      j_all_BIC[nb] = j
+    }
+  }
+}
+</code></pre>
+<!-- rnb-source-end -->
+<!-- rnb-chunk-end -->
+<!-- rnb-text-begin -->
+<p>Plot the BIC or AIC pour une ou plusieur simulations.</p>
+<!-- rnb-text-end -->
+<!-- rnb-chunk-begin -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuXG5wbG90KEFJQ19taW5bMSxdKVxuI2ZvciAoaSBpbiAxOjEwKXtsaW5lcyhBSUNfbWluW2krMSxdKX1cbmFibGluZSh2ID0gNCwgY29sID0gXCJyZWRcIiwgbHR5ID0gMilcblxucGxvdChCSUNfbWluWzEsXSlcbiNmb3IgKGkgaW4gMToxMCl7bGluZXMoQklDX21pbltpKzEsXSl9XG5hYmxpbmUodiA9IDQsIGNvbCA9IFwicmVkXCIsIGx0eSA9IDIpXG5cblxuYGBgIn0= -->
+<pre class="r"><code>
+plot(AIC_min[1,])
+#for (i in 1:10){lines(AIC_min[i+1,])}
+abline(v = 4, col = &quot;red&quot;, lty = 2)
+
+plot(BIC_min[1,])
+#for (i in 1:10){lines(BIC_min[i+1,])}
+abline(v = 4, col = &quot;red&quot;, lty = 2)
+</code></pre>
+<!-- rnb-source-end -->
+<!-- rnb-chunk-end -->
+<!-- rnb-text-begin -->
 <!-- rnb-text-end -->
 
-<div id="rmd-source-code">LS0tCnRpdGxlOiAiTW9kZWwgc2VsZWN0aW9uICIKYXV0aG9yOiAiV2VpIEppYW5nIgpkYXRlOiAiNS8xMC8yMDE4IgpvdXRwdXQ6IGh0bWxfbm90ZWJvb2sKLS0tClRoaXMgaXMgYW4gW1IgTWFya2Rvd25dKGh0dHA6Ly9ybWFya2Rvd24ucnN0dWRpby5jb20pIE5vdGVib29rLiBXaGVuIHlvdSBleGVjdXRlIGNvZGUgd2l0aGluIHRoZSBub3RlYm9vaywgdGhlIHJlc3VsdHMgYXBwZWFyIGJlbmVhdGggdGhlIGNvZGUuIAoKVHJ5IGV4ZWN1dGluZyB0aGlzIGNodW5rIGJ5IGNsaWNraW5nIHRoZSAqUnVuKiBidXR0b24gd2l0aGluIHRoZSBjaHVuayBvciBieSBwbGFjaW5nIHlvdXIgY3Vyc29yIGluc2lkZSBpdCBhbmQgcHJlc3NpbmcgKkNtZCtTaGlmdCtFbnRlciouIAoKYGBge3J9CnBsb3QoY2FycykKYGBgCgpBZGQgYSBuZXcgY2h1bmsgYnkgY2xpY2tpbmcgdGhlICpJbnNlcnQgQ2h1bmsqIGJ1dHRvbiBvbiB0aGUgdG9vbGJhciBvciBieSBwcmVzc2luZyAqQ21kK09wdGlvbitJKi4KCldoZW4geW91IHNhdmUgdGhlIG5vdGVib29rLCBhbiBIVE1MIGZpbGUgY29udGFpbmluZyB0aGUgY29kZSBhbmQgb3V0cHV0IHdpbGwgYmUgc2F2ZWQgYWxvbmdzaWRlIGl0IChjbGljayB0aGUgKlByZXZpZXcqIGJ1dHRvbiBvciBwcmVzcyAqQ21kK1NoaWZ0K0sqIHRvIHByZXZpZXcgdGhlIEhUTUwgZmlsZSkuIAoKVGhlIHByZXZpZXcgc2hvd3MgeW91IGEgcmVuZGVyZWQgSFRNTCBjb3B5IG9mIHRoZSBjb250ZW50cyBvZiB0aGUgZWRpdG9yLiBDb25zZXF1ZW50bHksIHVubGlrZSAqS25pdCosICpQcmV2aWV3KiBkb2VzIG5vdCBydW4gYW55IFIgY29kZSBjaHVua3MuIEluc3RlYWQsIHRoZSBvdXRwdXQgb2YgdGhlIGNodW5rIHdoZW4gaXQgd2FzIGxhc3QgcnVuIGluIHRoZSBlZGl0b3IgaXMgZGlzcGxheWVkLgoK</div>
+<div id="rmd-source-code">LS0tCnRpdGxlOiAiTW9kZWwgc2VsZWN0aW9uICIKYXV0aG9yOiAiV2VpIEppYW5nIgpkYXRlOiAiNS8xMC8yMDE4IgpvdXRwdXQ6IGh0bWxfbm90ZWJvb2sKLS0tCgpBZnRlciB3ZSBlc3RpbWF0ZSB0aGUgcGFyYW1ldGVycyBhbmQgdGhlaXIgdmFyaWFuY2Ugd2l0aCBTQUVNLCB0aGUgbmV4dCBvYmplY3RpdmUgaXMgdG8gcGVyZm9ybSB2YXJpYWJsZSBzZWxlY3Rpb24gd2l0aCBtaXNzaW5nIHZhbHVlcy4KCmBgYHtyfQpsaWJyYXJ5KG1pc2FlbSkKbGlicmFyeShNQVNTKQpsaWJyYXJ5KG12dG5vcm0pCmBgYAoKSGVyZSB3ZSBmaXJzdCBhc3NpZ24gdGhlIHRydWUgdmFsdWVzIG9mIHBhcmFtZXRlcnMuCgooQnkgdXNpbmcgZGlmZmVyZW50IHZhbHVlcywgd2UgY2FuIGNvbnN0cnVjdCBkaWZmZXJlbnQgc2V0dGluZywgc3VjaCBhcyBudW1iZXIgb2Ygc3ViamVjdHMgJG4kIG9yIHN0cnVjdHVyZSBvZiBjb3JyZWxhdGlvbi4pCmBgYHtyfQpuIDwtIDEwMDAgICMgbnVtYmVyIG9mIHN1YmplY3RzCiMgbiA8LSAxMDAwMCAjIG9yIGEgbGFyZ2VyIG51bWJlciBvZiBzdWJqZWN0cyAKCnAgPC0gNSAgICAgIyBudW1iZXIgb2YgZXhwbGFuYXRvcnkgdmFyaWFibGVzCm11LnN0YXIgPC0gMTpwICAjIG1lYW4gb2YgdGhlIGV4cGxhbmF0b3J5IHZhcmlhYmxlcwpzZCA8LSAxOnAgIyBzdGFuZGFyZCBkZXZpYXRpb25zCgojIHdpdGggY29ycmVsYXRpb24KQyA8LSBtYXRyaXgoYyggICAjIGNvcnJlbGF0aW9uIG1hdHJpeAogIDEsICAgMC44LCAwLCAgIDAsICAgMCwKICAwLjgsIDEsICAgMCwgICAwLCAgIDAsCiAgMCwgICAwLCAgIDEsICAgMC4zLCAwLjYsCiAgMCwgICAwLCAgIDAuMywgMSwgICAwLjcsCiAgMCwgICAwLCAgIDAuNiwgMC43LCAxCiksIG5yb3c9cCkKIyMgb3Igd2l0aG91dCBjb3JyZWxhdGlvbgojIEMgPSBkaWFnKHApCgpTaWdtYS5zdGFyIDwtIGRpYWcoc2QpJSolQyUqJWRpYWcoc2QpICMgdmFyaWFuY2UtY292YXJpYW5jZSBtYXRyaXggb2YgdGhlIGV4cGxhbmF0b3J5IHZhcmlhYmxlcwoKYmV0YS5zdGFyIDwtIGMoMC41LCAwLCAxLCAwLCAtMC42KSAgIyBjb2VmZmljaWVudHMgb2YgbG9naXN0aWMgcmVncmVzc2lvbgpiZXRhMC5zdGFyIDwtIC0wLjIgICMgaW50ZXJjZXB0CmJldGEudHJ1ZSA9IGMoYmV0YTAuc3RhcixiZXRhLnN0YXIpCgojcGVyY2VudGFnZSBvZiBtaXNzaW5nbmVzcwpwLm1pc3MgPC0gMC4xMCAKYGBgCgoKV2UgY29uc2lkZXIgdGhlIGNyaXRlcmlvbiBiYXNlZCBvbiBwZW5hbGlzZWQgbGlrZWxpaG9vZCwgc3VjaCBhcyBBSUMgYW5kIEJJQywgZm9yIHNlbGVjdGluZyB2YXJpYWJsZXMuCkZvciBlYWNoIGNvbWJpbmF0aW9uIG9mIHZhcmlhYmxlcywgd2UgZXN0aW1hdGUgdGhlIHBhcmFtZXRlcnMgd2l0aCBTQUVNLCB0aGVuIGNhbGN1bGF0ZSB0aGUgb2JzZXJ2ZWQgbG9nLWxpa2VsaWhvb2QuIEZpbmFsbHkgd2Ugc2VsZWN0IHRoZSBiZXN0IG1vZGVsIGFjY29yZGluZyB0byB0aGUgbWluaW11bSB2YWx1ZSBvZiBBSUMgb3IgQklDLgoKV2UgcnVuIDEwMCByZXBldGl0aW9ucyBvZiBzaW11bGF0aW9ucywgYW5kIGNvdW50IHRoZSBwZXJjZW50YWdlIHdoZW4sIHRoZSBwZXJjZW50YWdlIG9mIGNhc2VzIHdoZXJlIGVhY2ggY3JpdGVyaW9uIHNlbGVjdHMgdGhlIHRydWUgbW9kZWwgKEMpLCBvdmVyZml0cyAoTykg4oCTIGkuZS4sIHNlbGVjdHMgbW9yZSB2YXJpYWJsZXMgdGhhbiB0aGVyZSB3ZXJlIOKAkyBvciB1bmRlcmZpdHMgKFUpIOKAkyBpLmUuLCBzZWxlY3RzIGxlc3MgdmFyaWFibGVzIHRoYW4gdGhlcmUgd2VyZS4KCmBgYHtyfQpuYi5zaW11ID0gMTAwCgpzdWJzZXRzPWNvbWJpbmF0aW9ucyhwKQoKbGwgPSBBSUMgPSBCSUMgPSBtYXRyaXgoMCwgbnJvdyA9IG5iLnNpbXUsIG5jb2wgPSBucm93KHN1YnNldHMpLTEpCgpBSUNfbWluID1CSUNfbWluID0gbWF0cml4KDFlKzUsbnJvdyA9IG5iLnNpbXUsbmNvbCA9IHApCmpfQUlDID0gal9CSUMgID0gbWF0cml4KDAsbnJvdyA9IG5iLnNpbXUsbmNvbCA9IHApCgpBSUNfYWxsX21pbiA9QklDX2FsbF9taW4gPSByZXAoMWUrNSxuYi5zaW11KQpqX2FsbF9BSUMgPSBqX2FsbF9CSUMgPSByZXAoMCxuYi5zaW11KQoKZm9yKG5iIGluIDE6bmIuc2ltdSl7CiAgc2V0LnNlZWQobmIpCiAgY2F0KCdzaW11ICcsbmIsJ1xuJykKICAjIGNvbXBsZXRlIGRhdGEgc2ltdWxhdGlvbgogIHBhdHRlcm5zID0gcnVuaWYobipwKTxwLm1pc3MKICBYLmNvbXBsZXRlIDwtIG1hdHJpeChybm9ybShuKnApLCBucm93PW4pJSolY2hvbChTaWdtYS5zdGFyKSArIG1hdHJpeChyZXAobXUuc3RhcixuKSwgbnJvdz1uLCBieXJvdyA9IFRSVUUpCiAgcDEgPC0gMS8oMStleHAoLVguY29tcGxldGUlKiViZXRhLnN0YXItYmV0YTAuc3RhcikpCiAgeSA8LSBhcy5udW1lcmljKHJ1bmlmKG4pPHAxKQogIAogICMgZ2VuZXJhdGUgbWlzc2luZ25lc3MKICBYLm9icyA8LSBYLmNvbXBsZXRlCiAgWC5vYnNbcGF0dGVybnNdIDwtIE5BCiAgCiAgIyBpdGVyYXRlIGFtb25nIGVhY2ggY29tYmluYXRpb24KICBmb3IgKGogaW4gMToobnJvdyhzdWJzZXRzKS0xKSl7CiAgICBuYi52YXIgPSBzdW0oc3Vic2V0c1tqLF0pCiAgICB2YXJpYWJsZXMgPSBzdWJzZXRzW2osXQogICAgcG9zX3Zhcj13aGljaCh2YXJpYWJsZXM9PTEpCiAgICBuYi54ID0gc3VtKHZhcmlhYmxlcykKICAgIG5iLnBhcmEgPSAobmIueCArIDEpICsgcCArIHAqcCAKICAgIGxpc3Quc2FlbS5zdWJzZXQ9bWlzcy5zYWVtKFgub2JzLHkscG9zX3ZhcixtYXhydW5zPTEwMDAsdG9sX2VtPTFlLTcsbm1jbWM9Mix0YXU9MSxrMT01LHByaW50X2l0ZXI9RkFMU0UsbGxfb2JzX2NhbD1UUlVFKQogICAgbGxbbmIsal0gPSBsaXN0LnNhZW0uc3Vic2V0JGxsCiAgICBBSUNbbmIsal0gPSAtMipsbFtuYixqXSsgMipuYi5wYXJhCiAgICBCSUNbbmIsal0gPSAtMipsbFtuYixqXSsgbmIucGFyYSAqIGxvZyhuKQogICAgCiAgICBpZihBSUNbbmIsal08PUFJQ19taW5bbmIsbmIueF0pewogICAgICBBSUNfbWluW25iLG5iLnhdPSBBSUNbbmIsal0KICAgICAgal9BSUNbbmIsbmIueF0gPSBqCiAgICB9CiAgICBpZihCSUNbbmIsal08PUJJQ19taW5bbmIsbmIueF0pewogICAgICBCSUNfbWluW25iLG5iLnhdPSBCSUNbbmIsal0KICAgICAgal9CSUNbbmIsbmIueF0gPSBqCiAgICB9CiAgICBpZihBSUNbbmIsal08PUFJQ19hbGxfbWluW25iXSl7CiAgICAgIEFJQ19hbGxfbWluW25iXT0gQUlDW25iLGpdCiAgICAgIGpfYWxsX0FJQ1tuYl0gPSBqCiAgICB9CiAgICBpZihCSUNbbmIsal08PUJJQ19hbGxfbWluW25iXSl7CiAgICAgIEJJQ19hbGxfbWluW25iXT0gQklDW25iLGpdCiAgICAgIGpfYWxsX0JJQ1tuYl0gPSBqCiAgICB9CiAgfQp9CgpgYGAKCgpQbG90IHRoZSBCSUMgb3IgQUlDIHBvdXIgdW5lIG91IHBsdXNpZXVyIHNpbXVsYXRpb25zLgpgYGB7cn0KCnBsb3QoQUlDX21pblsxLF0pCiNmb3IgKGkgaW4gMToxMCl7bGluZXMoQUlDX21pbltpKzEsXSl9CmFibGluZSh2ID0gNCwgY29sID0gInJlZCIsIGx0eSA9IDIpCgpwbG90KEJJQ19taW5bMSxdKQojZm9yIChpIGluIDE6MTApe2xpbmVzKEJJQ19taW5baSsxLF0pfQphYmxpbmUodiA9IDQsIGNvbCA9ICJyZWQiLCBsdHkgPSAyKQoKCmBgYAoK</div>
 
 
 

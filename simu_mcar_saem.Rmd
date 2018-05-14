@@ -18,7 +18,7 @@ Here we first assign the true values of parameters.
 (By using different values, we can construct different setting, such as number of subjects $n$ or structure of correlation.)
 ```{r}
 n <- 10000  # number of subjects
-# n <- 1000 # or a larger number of subjects 
+# n <- 1000 # or a smaller number of subjects 
 
 p <- 5     # number of explanatory variables
 mu.star <- 1:p  # mean of the explanatory variables

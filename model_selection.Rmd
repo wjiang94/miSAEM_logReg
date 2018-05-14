@@ -4,17 +4,124 @@ author: "Wei Jiang"
 date: "5/10/2018"
 output: html_notebook
 ---
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
 
-Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+After we estimate the parameters and their variance with SAEM, the next objective is to perform variable selection with missing values.
 
 ```{r}
-plot(cars)
+library(misaem)
+library(MASS)
+library(mvtnorm)
 ```
 
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+Here we first assign the true values of parameters.
 
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+(By using different values, we can construct different setting, such as number of subjects $n$ or structure of correlation.)
+```{r}
+n <- 1000  # number of subjects
+# n <- 10000 # or a larger number of subjects 
 
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+p <- 5     # number of explanatory variables
+mu.star <- 1:p  # mean of the explanatory variables
+sd <- 1:p # standard deviations
+
+# with correlation
+C <- matrix(c(   # correlation matrix
+  1,   0.8, 0,   0,   0,
+  0.8, 1,   0,   0,   0,
+  0,   0,   1,   0.3, 0.6,
+  0,   0,   0.3, 1,   0.7,
+  0,   0,   0.6, 0.7, 1
+), nrow=p)
+## or without correlation
+# C = diag(p)
+
+Sigma.star <- diag(sd)%*%C%*%diag(sd) # variance-covariance matrix of the explanatory variables
+
+beta.star <- c(0.5, 0, 1, 0, -0.6)  # coefficients of logistic regression
+beta0.star <- -0.2  # intercept
+beta.true = c(beta0.star,beta.star)
+
+#percentage of missingness
+p.miss <- 0.10 
+```
+
+
+We consider the criterion based on penalised likelihood, such as AIC and BIC, for selecting variables.
+For each combination of variables, we estimate the parameters with SAEM, then calculate the observed log-likelihood. Finally we select the best model according to the minimum value of AIC or BIC.
+
+We run 100 repetitions of simulations, and count the percentage when, the percentage of cases where each criterion selects the true model (C), overfits (O) – i.e., selects more variables than there were – or underfits (U) – i.e., selects less variables than there were.
+
+```{r}
+nb.simu = 100
+
+subsets=combinations(p)
+
+ll = AIC = BIC = matrix(0, nrow = nb.simu, ncol = nrow(subsets)-1)
+
+AIC_min =BIC_min = matrix(1e+5,nrow = nb.simu,ncol = p)
+j_AIC = j_BIC  = matrix(0,nrow = nb.simu,ncol = p)
+
+AIC_all_min =BIC_all_min = rep(1e+5,nb.simu)
+j_all_AIC = j_all_BIC = rep(0,nb.simu)
+
+for(nb in 1:nb.simu){
+  set.seed(nb)
+  cat('simu ',nb,'\n')
+  # complete data simulation
+  patterns = runif(n*p)<p.miss
+  X.complete <- matrix(rnorm(n*p), nrow=n)%*%chol(Sigma.star) + matrix(rep(mu.star,n), nrow=n, byrow = TRUE)
+  p1 <- 1/(1+exp(-X.complete%*%beta.star-beta0.star))
+  y <- as.numeric(runif(n)<p1)
+  
+  # generate missingness
+  X.obs <- X.complete
+  X.obs[patterns] <- NA
+  
+  # iterate among each combination
+  for (j in 1:(nrow(subsets)-1)){
+    nb.var = sum(subsets[j,])
+    variables = subsets[j,]
+    pos_var=which(variables==1)
+    nb.x = sum(variables)
+    nb.para = (nb.x + 1) + p + p*p 
+    list.saem.subset=miss.saem(X.obs,y,pos_var,maxruns=1000,tol_em=1e-7,nmcmc=2,tau=1,k1=5,print_iter=FALSE,ll_obs_cal=TRUE)
+    ll[nb,j] = list.saem.subset$ll
+    AIC[nb,j] = -2*ll[nb,j]+ 2*nb.para
+    BIC[nb,j] = -2*ll[nb,j]+ nb.para * log(n)
+    
+    if(AIC[nb,j]<=AIC_min[nb,nb.x]){
+      AIC_min[nb,nb.x]= AIC[nb,j]
+      j_AIC[nb,nb.x] = j
+    }
+    if(BIC[nb,j]<=BIC_min[nb,nb.x]){
+      BIC_min[nb,nb.x]= BIC[nb,j]
+      j_BIC[nb,nb.x] = j
+    }
+    if(AIC[nb,j]<=AIC_all_min[nb]){
+      AIC_all_min[nb]= AIC[nb,j]
+      j_all_AIC[nb] = j
+    }
+    if(BIC[nb,j]<=BIC_all_min[nb]){
+      BIC_all_min[nb]= BIC[nb,j]
+      j_all_BIC[nb] = j
+    }
+  }
+}
+
+```
+
+
+Plot the BIC or AIC pour une ou plusieur simulations.
+```{r}
+
+plot(AIC_min[1,])
+#for (i in 1:10){lines(AIC_min[i+1,])}
+abline(v = 4, col = "red", lty = 2)
+
+plot(BIC_min[1,])
+#for (i in 1:10){lines(BIC_min[i+1,])}
+abline(v = 4, col = "red", lty = 2)
+
+
+```
 
