@@ -16,6 +16,7 @@ library(mvtnorm)
 Here we first assign the true values of parameters.
 
 (By using different values, we can construct different setting, such as number of subjects $n$ or structure of correlation.)
+
 ```{r}
 n <- 1000  # number of subjects
 # n <- 10000 # or a larger number of subjects 
@@ -68,13 +69,13 @@ for(nb in 1:nb.simu){
   set.seed(nb)
   cat('simu ',nb,'\n')
   # complete data simulation
-  patterns = runif(n*p)<p.miss
   X.complete <- matrix(rnorm(n*p), nrow=n)%*%chol(Sigma.star) + matrix(rep(mu.star,n), nrow=n, byrow = TRUE)
   p1 <- 1/(1+exp(-X.complete%*%beta.star-beta0.star))
   y <- as.numeric(runif(n)<p1)
   
   # generate missingness
   X.obs <- X.complete
+  patterns = runif(n*p)<p.miss
   X.obs[patterns] <- NA
   
   # iterate among each combination
@@ -111,7 +112,7 @@ for(nb in 1:nb.simu){
 ```
 
 
-Plot the BIC or AIC pour une ou plusieur simulations.
+Plot the BIC or AIC for several simulations.
 ```{r}
 
 plot(AIC_min[1,])
@@ -122,6 +123,79 @@ plot(BIC_min[1,])
 #for (i in 1:10){lines(BIC_min[i+1,])}
 abline(v = 4, col = "red", lty = 2)
 
+```
 
+In the case without correlation,
+```{r}
+n <- 1000  # number of subjects
+# n <- 10000 # or a larger number of subjects 
+
+p <- 5     # number of explanatory variables
+mu.star <- 1:p  # mean of the explanatory variables
+sd <- 1:p # standard deviations
+
+
+# without correlation
+C = diag(p)
+
+Sigma.star <- diag(sd)%*%C%*%diag(sd) # variance-covariance matrix of the explanatory variables
+
+beta.star <- c(0.5, 0, 1, 0, -0.6)  # coefficients of logistic regression
+beta0.star <- -0.2  # intercept
+beta.true = c(beta0.star,beta.star)
+
+#percentage of missingness
+p.miss <- 0.10 
+
+ll = AIC_nocor = BIC_nocor = matrix(0, nrow = nb.simu, ncol = nrow(subsets)-1)
+
+AIC_nocor_min =BIC_nocor_min = matrix(1e+5,nrow = nb.simu,ncol = p)
+j_AIC_nocor = j_BIC_nocor  = matrix(0,nrow = nb.simu,ncol = p)
+
+AIC_nocor_all_min =BIC_nocor_all_min = rep(1e+5,nb.simu)
+j_all_AIC_nocor = j_all_BIC_nocor = rep(0,nb.simu)
+
+for(nb in 1:nb.simu){
+  set.seed(nb)
+  # complete data simulation
+  X.complete <- matrix(rnorm(n*p), nrow=n)%*%chol(Sigma.star) + matrix(rep(mu.star,n), nrow=n, byrow = TRUE)
+  p1 <- 1/(1+exp(-X.complete%*%beta.star-beta0.star))
+  y <- as.numeric(runif(n)<p1)
+  
+  # generate missingness
+  X.obs <- X.complete
+  patterns = runif(n*p)<p.miss
+  X.obs[patterns] <- NA
+  
+  # iterate among each combination
+  for (j in 1:(nrow(subsets)-1)){
+    nb.var = sum(subsets[j,])
+    variables = subsets[j,]
+    pos_var=which(variables==1)
+    nb.x = sum(variables)
+    nb.para = (nb.x + 1) + p + p*p 
+    list.saem.subset=miss.saem(X.obs,y,pos_var,maxruns=1000,tol_em=1e-7,nmcmc=2,tau=1,k1=5,print_iter=FALSE,ll_obs_cal=TRUE)
+    ll[nb,j] = list.saem.subset$ll
+    AIC_nocor[nb,j] = -2*ll[nb,j]+ 2*nb.para
+    BIC_nocor[nb,j] = -2*ll[nb,j]+ nb.para * log(n)
+    
+    if(AIC_nocor[nb,j]<=AIC_nocor_min[nb,nb.x]){
+      AIC_nocor_min[nb,nb.x]= AIC_nocor[nb,j]
+      j_AIC_nocor[nb,nb.x] = j
+    }
+    if(BIC_nocor[nb,j]<=BIC_nocor_min[nb,nb.x]){
+      BIC_nocor_min[nb,nb.x]= BIC_nocor[nb,j]
+      j_BIC_nocor[nb,nb.x] = j
+    }
+    if(AIC_nocor[nb,j]<=AIC_nocor_all_min[nb]){
+      AIC_nocor_all_min[nb]= AIC_nocor[nb,j]
+      j_all_AIC_nocor[nb] = j
+    }
+    if(BIC_nocor[nb,j]<=BIC_nocor_all_min[nb]){
+      BIC_nocor_all_min[nb]= BIC_nocor[nb,j]
+      j_all_BIC_nocor[nb] = j
+    }
+  }
+}
 ```
 
