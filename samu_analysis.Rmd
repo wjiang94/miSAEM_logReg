@@ -1,0 +1,308 @@
+---
+title: "Analysis of Traumabase dataset "
+author: "Wei Jiang"
+date: "6/25/2018"
+output: html_notebook
+---
+
+This file contains the code for the exploration of Traumabase dataset, application of SAEM on Traumabase to explain the risk of hemorragic shock of severely traumatised patients.
+
+```{r}
+library(ggplot2)
+library(tidyr)
+library(knitr)
+library(MASS)
+library(mvtnorm)
+library(mice)
+library(ROCR)
+library(misaem)
+library(naniar)
+library(missMDA)
+library(FactoMineR)
+```
+
+Here we first :
+
+1. load the datasets; 
+2. select the prehospital variables;
+3. correct false calculation of BMI;
+Patients were excluded if 
+1. they had suffered from penetrating trauma (where an object such as a weapon or burns have pierced the skin and entered body tissue, creating an open wound)
+2. they had been in pre-hospital traumatic cardiac arrest, or when no pre-hospital data was available.
+```{r}
+traumdata <- read.csv(file="trauma.csv",sep=';',dec=',',header = TRUE,na.strings = c("","NR","IMP","NA","NF"),encoding = "UTF-8")
+SAMU <- traumdata[ ,c(10:14,225:228,234,33:35,15,18,229:233,244,19:30,41:42,49:54,48,58,61,44,46:47,55:57,60,62, 38)]
+
+SAMU$BMI[3302]=SAMU$Poids[3302]/(SAMU$Taille[3302]^2)
+
+SAMU=SAMU[-which(SAMU$ACR.1==1),]
+Choc.hemorragique= traumdata$Choc.hemorragique
+Choc.hemorragique = Choc.hemorragique[-which(traumdata$ACR.1==1)]
+
+Choc.hemorragique = Choc.hemorragique[-which(SAMU$Mecanisme=="Arme blanche" | SAMU$Mecanisme=="Arme à feu")]
+SAMU=SAMU[-which(SAMU$Mecanisme=="Arme blanche" | SAMU$Mecanisme=="Arme à feu"),]
+
+SAMU_CONT = SAMU[,c(1,3:5,34:41,43:44,48:50)]
+indx <- sapply(SAMU_CONT, is.factor)
+SAMU_CONT[indx] <- lapply(SAMU_CONT[indx], function(x) as.numeric(as.character(x)))
+SAMU_CONT$SD.min=SAMU_CONT$PAS.min-SAMU_CONT$PAD.min
+SAMU_CONT$SD.SMUR=SAMU_CONT$PAS.SMUR-SAMU_CONT$PAD.SMUR
+SAMU_NEW = SAMU_CONT[,-c(7:8,10:11,15)]
+```
+
+Plot the percentage of missingness
+```{r}
+gg_miss_var(SAMU_NEW,show_pct = TRUE)+ ylab('% Missing')
+```
+
+To perform our algorithm and evaluate its predictive perfermance, thus comparing to other existing methods, we consider the classical cross-validation procedures. We split the whole dataset into training and test sets, then estimate the parameters and select the variables on the training set, finally predict the response on the test set.
+
+First we defines all the functions to use in SAEM and others methods.
+
+Functions for SAEM:
+
+* data_split: split the dataset into training and test sets
+* model_selection_samu: perform model selection (BIC forward) with SAEM for Traumabase data
+* prediction_saem_samu: predict the risk of hemorragic shock in test sets (with missing data)
+* combinations: function to use in model selection, return all the possible combination of variables
+```{r}
+data_split = function(SAMU_NEW,seed_val){
+  set.seed(seed_val) 
+  sample <- sample.int(n = nrow(SAMU_NEW), size = floor(.2*nrow(SAMU_NEW)), replace = F)
+  SAMU.train  <- SAMU_NEW[-sample, ]
+  SAMU.test <-SAMU_NEW[sample, ]
+  Choc.hemorragique.train=Choc.hemorragique[-sample]
+  Choc.hemorragique.test=Choc.hemorragique[sample]
+  if(sum(rowSums(is.na(SAMU.test))==dim(SAMU.test)[2])!=0){
+    Choc.hemorragique.test = Choc.hemorragique.test[-which(rowSums(is.na(SAMU.test))==dim(SAMU.test)[2])]
+    SAMU.test = SAMU.test[-which(rowSums(is.na(SAMU.test))==dim(SAMU.test)[2]),]
+  }
+  return(list(SAMU.train=SAMU.train,SAMU.test=SAMU.test,Choc.hemorragique.train=Choc.hemorragique.train,Choc.hemorragique.test=Choc.hemorragique.test))
+}
+
+model_selection_saem = function(SAMU.train,Choc.hemorragique.train){
+  N=dim(SAMU.train)[1]
+  p=dim(SAMU.train)[2]
+  subsets=combinations(p)
+  ll = matrix(-Inf,nrow=p,ncol=p)
+  subsets1 = subsets[rowSums(subsets)==1,]
+  for (j in 1:(nrow(subsets1))){
+    #cat('subset ',subsets1[j,],'\n')  
+    pos_var=which(subsets1[j,]==1)
+    list.saem.subset=miss.saem(data.matrix(SAMU.train),Choc.hemorragique.train,pos_var,maxruns=500,tol_em=1e-7,nmcmc=2,print_iter=FALSE,ll_obs_cal=TRUE)
+    ll[1,j] = list.saem.subset$ll
+  }
+  id = BIC = rep(0,p)
+  subsetsi=subsets1
+  SUBSETS = matrix(-Inf,nrow=p,ncol=p)
+  for(i in 2:p){
+    nb.x = i-1
+    nb.para = (nb.x + 1) + p + p*p 
+    id[i-1] = d = which.max(ll[i-1,])
+    pos_var=which(subsetsi[d,]==1)
+    BIC[i-1] = -2*ll[i-1,d]+ nb.para * log(N)
+    SUBSETS[i-1,]=subsetsi[d,]
+    if(i==2){subsetsi = subsets[(rowSums(subsets)==i) & (subsets[,pos_var]==i-1),]}
+    if(i>2){subsetsi = subsets[(rowSums(subsets)==i) & (rowSums(subsets[,pos_var])==i-1),]}
+    for (j in 1:(nrow(subsetsi))){
+      cat('subset ',subsetsi[j,],'\n')  
+      pos_var=which(subsetsi[j,]==1)
+      list.saem.subset=miss.saem(data.matrix(SAMU.train),Choc.hemorragique.train,pos_var,maxruns=1000,tol_em=1e-7,nmcmc=2,print_iter=FALSE,ll_obs_cal=TRUE)
+      ll[i,j] = list.saem.subset$ll
+    }
+  }
+  list.saem.subset=miss.saem(data.matrix(SAMU.train),Choc.hemorragique.train,1:p,maxruns=1000,tol_em=1e-7,nmcmc=2,print_iter=FALSE,ll_obs_cal=TRUE)
+  ll[p,1] = list.saem.subset$ll
+  nb.x = p
+  nb.para = (nb.x + 1) + p + p*p 
+  BIC[p] = -2*ll[p,1]+ nb.para * log(N)
+  
+  subset_choose = which(SUBSETS[which.min(BIC),]==1)
+  list.saem.subset=miss.saem(data.matrix(SAMU.train),Choc.hemorragique.train,subset_choose,maxruns=1000,tol_em=1e-7,k1=2,nmcmc=2,print_iter=TRUE)
+  beta.saem.train = list.saem.subset$beta
+  se.saem.train = list.saem.subset$std_obs
+  mu.saem = list.saem.subset$mu
+  sig2.saem = list.saem.subset$sig2
+  return(list(beta=beta.saem.train,se=se.saem.train,mu=mu.saem,sig2=sig2.saem,subset=subset_choose))
+}
+
+prediction_saem=function(SAMU.test,Choc.hemorragique.test,beta.saem.train,mu.saem,sig2.saem){
+  rindic = as.matrix(is.na(SAMU.test))
+  for(i in 1:dim(SAMU.test)[1]){
+    if(sum(rindic[i,])!=0){
+      miss_col = which(rindic[i,]==TRUE)
+      x2 = SAMU.test[i,-miss_col]
+      mu1 = mu.saem[miss_col]
+      mu2 = mu.saem[-miss_col]
+      sigma11 = sig2.saem[miss_col,miss_col]
+      sigma12 = sig2.saem[miss_col,-miss_col]
+      sigma22 = sig2.saem[-miss_col,-miss_col]
+      sigma21 = sig2.saem[-miss_col,miss_col]
+      mu_cond = mu1+sigma12 %*% solve(sigma22)%*%(x2-mu2)
+      SAMU.test[i,miss_col] =mu_cond
+    }
+  }
+  tmp <- as.matrix(cbind.data.frame(rep(1,dim(SAMU.test)[1]),SAMU.test)) %*% as.matrix(beta.saem.train) 
+  pr.saem <- 1/(1+(1/exp(tmp)))
+  pre <- prediction(pr.saem, Choc.hemorragique.test)
+  auc.saem <- performance(pre, measure = "auc")@y.values[[1]]
+  cost.perf = performance(pre, "cost", cost.fp = 1, cost.fn = 10)
+  thsd = pre@cutoffs[[1]][which.min(cost.perf@y.values[[1]])]
+  pred.saem = (pr.saem > thsd)*1
+  tb.saem = table(Choc.hemorragique.test,pred.saem)
+  acc.saem =(tb.saem[1,1]+tb.saem[2,2])/sum(tb.saem)
+  preci.saem = tb.saem[2,2]/(tb.saem[1,2]+tb.saem[2,2])
+  sensi.saem =tb.saem[2,2]/(tb.saem[2,1] +tb.saem[2,2])
+  spe.saem =tb.saem[1,1]/(tb.saem[1,1] +tb.saem[1,2])
+  return(list(auc = auc.saem,acc=acc.saem,preci=preci.saem,sensi=sensi.saem,spe=spe.saem))
+}
+
+combinations = function(n){
+  comb = NULL
+  for( i in 1:n) comb = rbind(cbind(1,comb),cbind(0,comb))
+  return(comb)
+}
+```
+
+Functions for mice:
+```{r}
+prediction_mice = function(SAMU.train,Choc.hemorragique.train,SAMU.test,Choc.hemorragique.test){
+  # estimation and model selection
+  DATA.ch= cbind.data.frame(Choc.hemorragique.train,SAMU.train)
+  N=dim(SAMU.train)[1]
+  p=dim(SAMU.train)[2]
+  imp.ch <- mice(DATA.ch,seed=100,m=20,print=FALSE,method='rf')
+  SAMU.mean = complete(imp.ch,action=1)
+  for(i in 2:20){SAMU.mean = SAMU.mean + complete(imp.ch,action=i)}
+  SAMU.mean = SAMU.mean[,2:dim(SAMU.mean)[2]]/20
+
+  expr <- expression(
+    fit.ch0 <- glm(Choc.hemorragique.train~1,family = binomial),
+    f2 <- step(fit.ch0, scope=list(upper=~Age+Poids+Taille+BMI+Glasgow.initial+Glasgow.moteur.initial+
+                                   FC.max+FC.SMUR+Hemocue.init+SpO2.min+
+                                   Remplissage.total.cristalloides+ Remplissage.total.colloides+SD.min+SD.SMUR, lower=~1),direction="forward",k=log(N),trace=FALSE)) 
+  fit <- with(imp.ch, expr)
+  formulas <- lapply(fit$an, formula)
+  terms <- lapply(formulas, terms)
+  vars <- unlist(lapply(terms, labels))
+  pos_var=as.vector(which(table(vars)>=17))
+
+  beta.mice.train=summary(pool(fit.without))[,1]
+  se.mice.train=summary(pool(fit.without))[,2]
+
+  #prediction
+  for(i in 1:ncol(SAMU.test)){SAMU.test[is.na(SAMU.test[,i]), i]<- mean(SAMU.mean[,i], na.rm = TRUE)}
+  SAMU.test = data.matrix(cbind.data.frame(rep(1,dim(SAMU.test)[1]),SAMU.test)[,pos_var])
+  tmp <- SAMU.test4%*% as.matrix(beta.mice.train) 
+  pr <- 1/(1+(1/exp(tmp)))
+  pr.mice <- 1/(1+(1/exp(tmp)))
+
+  pre <- prediction(pr.mice, Choc.hemorragique.test)
+  auc.mice <- performance(pre, measure = "auc")@y.values[[1]]
+  cost.perf = performance(pre, "cost", cost.fp = 1, cost.fn = 10)
+  seuil = pre@cutoffs[[1]][which.min(cost.perf@y.values[[1]])]
+  pred.mice = (pr.mice>seuil)*1
+  tb.mice=table(Choc.hemorragique.test,pred.mice)
+  acc.mice =(tb.mice[1,1]+tb.mice[2,2])/sum(tb.mice)
+  preci.mice = tb.mice[2,2]/(tb.mice[1,2]+tb.mice[2,2])
+  sensi.mice =tb.mice[2,2]/(tb.mice[2,1] +tb.mice[2,2])
+  spe.mice =tb.mice[1,1]/(tb.mice[1,1] +tb.mice[1,2])
+  return(list(auc=auc.mice,acc=acc.mice,preci=preci.mice,sensi=sensi.mice,spe=spe.mice))
+}
+```
+
+Functions for imputation by PCA
+```{r}
+prediction_imppca = function(SAMU.train,Choc.hemorragique.train,SAMU.test,Choc.hemorragique.test){
+  # estimation and model selection
+  res.comp = imputePCA(SAMU.train) #iterative PCA
+  imp = cbind.data.frame(Choc.hemorragique.train,res.comp$completeObs)
+  regfull =  glm(Choc.hemorragique.train~., data=imp,family = binomial)
+  reg0 =  glm(Choc.hemorragique.train~1, data=imp,family = binomial)
+  msBIC = step(reg0,scope=list(lower=formula(reg0),upper=formula(regfull)), direction="forward",k=log(N))
+  beta.imppca = summary(msBIC)$coef[,1]
+  se.imppca = summary(msBIC)$coef[,2]
+  # prediction
+  for(i in 1:ncol(SAMU.test3)){
+  SAMU.test[is.na(SAMU.test[,i]), i]<- mean(res.comp$completeObs[,i], na.rm = TRUE)
+  }
+  tmp <- predict(msBIC, newdata=as.data.frame(SAMU.test))
+  pr.imppca <- 1/(1+(1/exp(tmp)))
+  pre <- prediction(pr.imppca, Choc.hemorragique.test)
+  auc.imppca <- performance(pre, measure = "auc")@y.values[[1]]
+  cost.perf = performance(pre, "cost", cost.fp = 1, cost.fn = 10)#false positives are twice as costly as false negatives
+  seuil = pre@cutoffs[[1]][which.min(cost.perf@y.values[[1]])]
+  pred.imppca = (pr.imppca >seuil)*1
+
+  tb.imppca=table(Choc.hemorragique.test,pred.imppca)
+  acc.imppca =(tb.imppca[1,1]+tb.imppca[2,2])/sum(tb.imppca)
+  preci.imppca = tb.imppca[2,2]/(tb.imppca[1,2]+tb.imppca[2,2])
+  sensi.imppca =tb.imppca[2,2]/(tb.imppca[2,1] +tb.imppca[2,2])
+  spe.imppca =tb.imppca[1,1]/(tb.imppca[1,1] +tb.imppca[1,2])
+  return(list(auc=auc.imppca,auc=acc.imppca,preci=preci.imppca,sensi=sensi.imppca,spe=spe.imppca))
+}
+```
+
+Functions for mean imputation
+```{r}
+prediction_mean = function(SAMU.train,Choc.hemorragique.train,SAMU.test,Choc.hemorragique.test){
+  for(i in 1:ncol(SAMU.train)){
+    SAMU.train[is.na(SAMU.train[,i]), i] <-  SAMU.test[is.na(SAMU.test[,i]), i] <- mean(SAMU.train[,i], na.rm = TRUE)}
+  DATA.mean= cbind.data.frame(Choc.hemorragique.train,SAMU.train)
+  regfull =  glm(Choc.hemorragique.train~., data=DATA.mean,family = binomial)
+  reg0 =  glm(Choc.hemorragique.train~1, data=DATA.mean,family = binomial)
+  BIC.mean = step(reg0,scope=list(lower=formula(reg0),upper=formula(regfull)), direction="forward",k=log(N),trace=FALSE)
+  beta.mean = summary(BIC.mean)$coef[,1]
+  se.mean = summary(BIC.mean)$coef[,2]
+  tmp <- predict(BIC.mean, newdata=as.data.frame(SAMU.test))
+  pr.mean <- 1/(1+exp(-tmp))
+  pre <- prediction(pr.mean, Choc.hemorragique.test)
+  auc.mean <- performance(pre, measure = "auc")@y.values[[1]]
+  cost.perf = performance(pre, "cost", cost.fp = 1, cost.fn = 10)
+  seuil = pre@cutoffs[[1]][which.min(cost.perf@y.values[[1]])]
+  pred.mean = (pr.mean >seuil)*1
+  tb.mean=table(Choc.hemorragique.test,pred.mean)
+  acc.mean =(tb.mean[1,1]+tb.mean[2,2])/sum(tb.mean)
+  preci.mean = tb.mean[2,2]/(tb.mean[1,2]+tb.mean[2,2])
+  sensi.mean =tb.mean[2,2]/(tb.mean[2,1] +tb.mean[2,2])
+  spe.mean =tb.mean[1,1]/(tb.mean[1,1] +tb.mean[1,2])
+  return(list(auc=auc.mean,acc=acc.mean,preci=preci.mean,sensi=sensi.mean,spe=spe.mean))
+}
+```
+
+With 15 times of data spliting, we perform the estimation and prediction procedure.
+```{r}
+seed = c(1,10,20,30,40,50,60,70,80,90,110,120,130,140,150)
+AUC.SAEM = AUC.MICE = AUC.IMPPCA = AUC.MEAN = ACC.SAEM = ACC.MICE = ACC.IMPPCA = ACC.MEAN = PRECI.SAEM = PRECI.MICE = PRECI.IMPPCA = PRECI.MEAN = SENSI.SAEM = SENSI.MICE= SENSI.IMPPCA = SENSI.MEAN = SPE.SAEM = SPE.MICE = SPE.IMPPCA = SPE.MEAN = rep(0,15)
+for(s in 1:15){
+  seed_val = seed[s]
+  set.seed(seed_val) 
+  dataset = data_split(SAMU_NEW,seed_val)
+  SAMU.train = dataset$SAMU.train
+  SAMU.test = dataset$SAMU.test
+  Choc.hemorragique.train = dataset$Choc.hemorragique.train
+  Choc.hemorragique.test = dataset$Choc.hemorragique.test
+  est.saem = model_selection_saem(SAMU.train,Choc.hemorragique.train)
+  res.saem = prediction_saem(SAMU.test,Choc.hemorragique.test,est.saem$beta,est.saem$mu,est.saem$sig2)
+  res.mice = prediction_mice(SAMU.train,Choc.hemorragique.train,SAMU.test,Choc.hemorragique.test)
+  res.imppca= prediction_imppca(SAMU.train,Choc.hemorragique.train,SAMU.test,Choc.hemorragique.test)
+  res.mean = prediction_mean(SAMU.train,Choc.hemorragique.train,SAMU.test,Choc.hemorragique.test)
+  AUC.SAEM[s] = res.saem$auc; AUC.MICE[s] = res.mice$auc; AUC.IMPPCA[s] = res.imppca$auc; AUC.MEAN[s] = res.mean$auc
+  ACC.SAEM[s] = res.saem$acc; ACC.MICE[s] = res.mice$acc; ACC.IMPPCA[s] = res.imppca$acc; ACC.MEAN[s] = res.mean$acc
+  PRECI.SAEM[s] = res.saem$preci; PRECI.MICE[s] = res.mice$preci; PRECI.IMPPCA[s] = res.imppca$preci; PRECI.MEAN[s] = res.mean$preci
+  SENSI.SAEM[s] = res.saem$sensi; SENSI.MICE[s] = res.mice$sensi; SENSI.IMPPCA[s] = res.imppca$sensi; SENSI.MEAN[s] = res.mean$sensi
+  SPE.SAEM[s] = res.saem$spe; SPE.MICE[s] = res.mice$spe; SPE.IMPPCA[s] = res.imppca$spe; SPE.MEAN[s] = res.mean$spe
+}
+print("AUC:")
+sapply(list(AUC.SAEM,AUC.IMPPCA,AUC.MEAN,AUC.MICE), median)
+print("sensitivity:")
+sapply(list(SENSI.SAEM,SENSI.IMPPCA,SENSI.MEAN,SENSI.MICE), median)
+print("specificity:")
+sapply(list(SPE.SAEM,SPE.IMPPCA,SPE.MEAN,SPE.MICE), median)
+print("accurancy:")
+sapply(list(ACC.SAEM,ACC.IMPPCA,ACC.MEAN,ACC.MICE), median)
+print("precision:")
+sapply(list(PRECI.SAEM,PRECI.IMPPCA,PRECI.MEAN,PRECI.MICE), median)
+
+```
+
