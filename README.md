@@ -31,3 +31,6 @@ We run repetitions of simulations. And evaluate their performance, intially in t
 * Execution time (Table 2).
 
 **model_selection**:  Model selection results (Table 3).
+
+
+**samu_analysis**:  Analysis of Traumabase data: risk of hemorragic shock.
