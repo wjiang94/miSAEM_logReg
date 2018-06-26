@@ -1,7 +1,7 @@
 
 # SAEM for logistic regression with missing values
 Here are R codes of functions and implementations for paper
-"Stochastic Approximation EM for Logistic regression with missing values (2018, Jiang W., Josse J., Lavielle M., Gauss T.)".
+"Stochastic Approximation EM for Logistic regression with missing values (2018, Jiang W., Josse J., Lavielle M., Gauss T.)" [arxiv link](https://arxiv.org/abs/1805.04602).
 
 ## Installation of package 
 First you can install the package **misaem** from Github. The main function `miss.saem` contains the procedure of estimation for parameters, as well as their variance, and observed likelihood.
