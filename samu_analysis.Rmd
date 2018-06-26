@@ -54,6 +54,18 @@ Plot the percentage of missingness
 ```{r}
 gg_miss_var(SAMU_NEW,show_pct = TRUE)+ ylab('% Missing')
 ```
+PCA
+```{r}
+res.comp = imputePCA(SAMU_CONT) #iterative PCA
+imp = cbind.data.frame(as.factor(Choc.hemorragique),res.comp$completeObs)
+#perform the PCA on the completed data set using the PCA function of the FactoMineR package
+res.pca = PCA(imp,quali.sup = 1,graph = FALSE)
+plot(res.pca,choix='ind',hab=1, lab ='quali',cex=0.5)
+```
+```{r}
+plot(res.pca,choix='var',cex=0.5)
+```
+
 
 To perform our algorithm and evaluate its predictive perfermance, thus comparing to other existing methods, we consider the classical cross-validation procedures. We split the whole dataset into training and test sets, then estimate the parameters and select the variables on the training set, finally predict the response on the test set.
 
