@@ -56,7 +56,7 @@ gg_miss_var(SAMU_NEW,show_pct = TRUE)+ ylab('% Missing')
 ```
 PCA
 ```{r}
-res.comp = imputePCA(SAMU_CONT) #iterative PCA
+res.comp = imputePCA(SAMU_NEW) #iterative PCA
 imp = cbind.data.frame(as.factor(Choc.hemorragique),res.comp$completeObs)
 #perform the PCA on the completed data set using the PCA function of the FactoMineR package
 res.pca = PCA(imp,quali.sup = 1,graph = FALSE)
@@ -92,14 +92,13 @@ data_split = function(SAMU_NEW,seed_val){
   return(list(SAMU.train=SAMU.train,SAMU.test=SAMU.test,Choc.hemorragique.train=Choc.hemorragique.train,Choc.hemorragique.test=Choc.hemorragique.test))
 }
 
-model_selection_saem = function(SAMU.train,Choc.hemorragique.train){
+model_selection_saem = function(SAMU.train,Choc.hemorragique.train,ifshow=FALSE){
   N=dim(SAMU.train)[1]
   p=dim(SAMU.train)[2]
   subsets=combinations(p)
   ll = matrix(-Inf,nrow=p,ncol=p)
   subsets1 = subsets[rowSums(subsets)==1,]
   for (j in 1:(nrow(subsets1))){
-    #cat('subset ',subsets1[j,],'\n')  
     pos_var=which(subsets1[j,]==1)
     list.saem.subset=miss.saem(data.matrix(SAMU.train),Choc.hemorragique.train,pos_var,maxruns=500,tol_em=1e-7,nmcmc=2,print_iter=FALSE,ll_obs_cal=TRUE)
     ll[1,j] = list.saem.subset$ll
@@ -116,11 +115,12 @@ model_selection_saem = function(SAMU.train,Choc.hemorragique.train){
     SUBSETS[i-1,]=subsetsi[d,]
     if(i==2){subsetsi = subsets[(rowSums(subsets)==i) & (subsets[,pos_var]==i-1),]}
     if(i>2){subsetsi = subsets[(rowSums(subsets)==i) & (rowSums(subsets[,pos_var])==i-1),]}
-    for (j in 1:(nrow(subsetsi))){
-      cat('subset ',subsetsi[j,],'\n')  
-      pos_var=which(subsetsi[j,]==1)
-      list.saem.subset=miss.saem(data.matrix(SAMU.train),Choc.hemorragique.train,pos_var,maxruns=1000,tol_em=1e-7,nmcmc=2,print_iter=FALSE,ll_obs_cal=TRUE)
-      ll[i,j] = list.saem.subset$ll
+    if(i<p){
+      for (j in 1:(nrow(subsetsi))){
+        pos_var=which(subsetsi[j,]==1)
+        list.saem.subset=miss.saem(data.matrix(SAMU.train),Choc.hemorragique.train,pos_var,maxruns=1000,tol_em=1e-7,nmcmc=2,print_iter=FALSE,ll_obs_cal=TRUE)
+        ll[i,j] = list.saem.subset$ll
+      }
     }
   }
   list.saem.subset=miss.saem(data.matrix(SAMU.train),Choc.hemorragique.train,1:p,maxruns=1000,tol_em=1e-7,nmcmc=2,print_iter=FALSE,ll_obs_cal=TRUE)
@@ -128,7 +128,7 @@ model_selection_saem = function(SAMU.train,Choc.hemorragique.train){
   nb.x = p
   nb.para = (nb.x + 1) + p + p*p 
   BIC[p] = -2*ll[p,1]+ nb.para * log(N)
-  
+  if(ifshow==TRUE){plot(BIC);lines(BIC)}
   subset_choose = which(SUBSETS[which.min(BIC),]==1)
   list.saem.subset=miss.saem(data.matrix(SAMU.train),Choc.hemorragique.train,subset_choose,maxruns=1000,tol_em=1e-7,k1=2,nmcmc=2,print_iter=TRUE)
   beta.saem.train = list.saem.subset$beta
@@ -297,12 +297,12 @@ SAMU.train = dataset$SAMU.train
 SAMU.test = dataset$SAMU.test
 Choc.hemorragique.train = dataset$Choc.hemorragique.train
 Choc.hemorragique.test = dataset$Choc.hemorragique.test
-est.saem = model_selection_saem(SAMU.train,Choc.hemorragique.train)
-res.saem = prediction_saem(SAMU.test,Choc.hemorragique.test,est.saem$beta,est.saem$mu,est.saem$sig2,ifshow=TRUE)
-
+est.saem = model_selection_saem(SAMU.train,Choc.hemorragique.train,ifshow=TRUE)
+res.saem = prediction_saem(data.matrix(SAMU.test),Choc.hemorragique.test,est.saem$beta,est.saem$mu,est.saem$sig2,ifshow=TRUE)
 ```
 
 With 15 times of data spliting, we perform the estimation and prediction procedure.
+
 ```{r}
 seed = c(1,10,20,30,40,50,60,70,80,90,110,120,130,140,150)
 AUC.SAEM = AUC.MICE = AUC.IMPPCA = AUC.MEAN = ACC.SAEM = ACC.MICE = ACC.IMPPCA = ACC.MEAN = PRECI.SAEM = PRECI.MICE = PRECI.IMPPCA = PRECI.MEAN = SENSI.SAEM = SENSI.MICE= SENSI.IMPPCA = SENSI.MEAN = SPE.SAEM = SPE.MICE = SPE.IMPPCA = SPE.MEAN = rep(0,15)
@@ -325,6 +325,9 @@ for(s in 1:15){
   SENSI.SAEM[s] = res.saem$sensi; SENSI.MICE[s] = res.mice$sensi; SENSI.IMPPCA[s] = res.imppca$sensi; SENSI.MEAN[s] = res.mean$sensi
   SPE.SAEM[s] = res.saem$spe; SPE.MICE[s] = res.mice$spe; SPE.IMPPCA[s] = res.imppca$spe; SPE.MEAN[s] = res.mean$spe
 }
+```
+
+```{r}
 print("AUC:")
 sapply(list(AUC.SAEM,AUC.IMPPCA,AUC.MEAN,AUC.MICE), median)
 print("sensitivity:")
@@ -335,6 +338,5 @@ print("accurancy:")
 sapply(list(ACC.SAEM,ACC.IMPPCA,ACC.MEAN,ACC.MICE), median)
 print("precision:")
 sapply(list(PRECI.SAEM,PRECI.IMPPCA,PRECI.MEAN,PRECI.MICE), median)
-
 ```
 
