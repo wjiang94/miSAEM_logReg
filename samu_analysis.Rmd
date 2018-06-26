@@ -138,7 +138,7 @@ model_selection_saem = function(SAMU.train,Choc.hemorragique.train){
   return(list(beta=beta.saem.train,se=se.saem.train,mu=mu.saem,sig2=sig2.saem,subset=subset_choose))
 }
 
-prediction_saem=function(SAMU.test,Choc.hemorragique.test,beta.saem.train,mu.saem,sig2.saem){
+prediction_saem=function(SAMU.test,Choc.hemorragique.test,beta.saem.train,mu.saem,sig2.saem,ifshow=FALSE){
   rindic = as.matrix(is.na(SAMU.test))
   for(i in 1:dim(SAMU.test)[1]){
     if(sum(rindic[i,])!=0){
@@ -162,6 +162,12 @@ prediction_saem=function(SAMU.test,Choc.hemorragique.test,beta.saem.train,mu.sae
   thsd = pre@cutoffs[[1]][which.min(cost.perf@y.values[[1]])]
   pred.saem = (pr.saem > thsd)*1
   tb.saem = table(Choc.hemorragique.test,pred.saem)
+  if(ifshow==TRUE){
+    print(tb.saem)
+    prf <- performance(pre, measure = "tpr", x.measure = "fpr")
+    plot(prf, colorize = FALSE,main = "ROC on validation set - SAEM ")
+    abline(a=0, b= 1, col="grey80")
+  }
   acc.saem =(tb.saem[1,1]+tb.saem[2,2])/sum(tb.saem)
   preci.saem = tb.saem[2,2]/(tb.saem[1,2]+tb.saem[2,2])
   sensi.saem =tb.saem[2,2]/(tb.saem[2,1] +tb.saem[2,2])
@@ -280,6 +286,20 @@ prediction_mean = function(SAMU.train,Choc.hemorragique.train,SAMU.test,Choc.hem
   spe.mean =tb.mean[1,1]/(tb.mean[1,1] +tb.mean[1,2])
   return(list(auc=auc.mean,acc=acc.mean,preci=preci.mean,sensi=sensi.mean,spe=spe.mean))
 }
+```
+
+Estimation on training set => prediction on test set by SAEM
+
+```{r}
+set.seed(100)
+dataset = data_split(SAMU_NEW,100)
+SAMU.train = dataset$SAMU.train
+SAMU.test = dataset$SAMU.test
+Choc.hemorragique.train = dataset$Choc.hemorragique.train
+Choc.hemorragique.test = dataset$Choc.hemorragique.test
+est.saem = model_selection_saem(SAMU.train,Choc.hemorragique.train)
+res.saem = prediction_saem(SAMU.test,Choc.hemorragique.test,est.saem$beta,est.saem$mu,est.saem$sig2,ifshow=TRUE)
+
 ```
 
 With 15 times of data spliting, we perform the estimation and prediction procedure.
